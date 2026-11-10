@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Claude">
+<title>چت با Claude (Puter)</title>
+<style>
+:root{--bg:#f3f5f7;--panel:#fff;--ink:#16202a;--mute:#6a7783;--line:#dde3e8;--me:#1f4e5f;--meink:#fff;--bot:#fff;--accent:#1f4e5f}
+@media (prefers-color-scheme:dark){:root{--bg:#10171c;--panel:#18222a;--ink:#e6edf2;--mute:#8a99a5;--line:#27343e;--me:#2f7a93;--meink:#fff;--bot:#1d2a33;--accent:#5fb3cc}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:16px/1.7 -apple-system,"SF Pro Text","Vazirmatn",Tahoma,sans-serif;display:flex;flex-direction:column;height:-webkit-fill-available;min-height:-webkit-fill-available}
+header{display:flex;align-items:center;justify-content:space-between;padding:calc(10px + env(safe-area-inset-top,0px)) 14px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+header b{font-size:17px}
+header button{background:none;border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;font-size:14px;margin-right:6px}
+#log{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px}
+.msg{max-width:88%;padding:10px 14px;margin:0 0 12px;border-radius:14px;white-space:pre-wrap;word-wrap:break-word;overflow-wrap:anywhere}
+.me{background:var(--me);color:var(--meink);margin-left:auto;border-bottom-right-radius:4px}
+.bot{background:var(--bot);border:1px solid var(--line);margin-right:auto;border-bottom-left-radius:4px}
+.err{background:none;border:1px dashed #c0504d;color:#c0504d;margin-right:auto}
+.empty{color:var(--mute);text-align:center;margin-top:30vh;padding:0 24px}
+form{display:flex;padding:10px 12px calc(10px + env(safe-area-inset-bottom,0px));background:var(--panel);border-top:1px solid var(--line)}
+textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:12px;padding:10px 12px;font:inherit;background:var(--bg);color:var(--ink);max-height:140px;margin-left:8px}
+#send{border:0;border-radius:12px;background:var(--accent);color:#fff;font:inherit;font-weight:600;padding:0 18px}
+#send:disabled{opacity:.5}
+#cfg{display:none;padding:14px;background:var(--panel);border-bottom:1px solid var(--line)}
+#cfg.open{display:block}
+#cfg label{display:block;font-size:14px;color:var(--mute);margin:8px 0 4px}
+#cfg input{width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;font:inherit;background:var(--bg);color:var(--ink);direction:ltr;text-align:left}
+#cfg small{display:block;color:var(--mute);margin-top:8px;font-size:13px}
+</style>
+</head>
+<body>
+<header>
+  <b>Claude</b>
+  <span><button id="clear" type="button">گفتگوی جدید</button><button id="gear" type="button">تنظیمات</button></span>
+</header>
+<div id="cfg">
+  <button id="login" type="button" style="width:100%;padding:10px;border-radius:10px;border:0;background:var(--accent);color:#fff;font:inherit;font-weight:600">ورود به Puter</button>
+  <label for="model">مدل (نام را می‌توانید ویرایش کنید)</label>
+  <input id="model" list="ml" value="claude-sonnet-4-5">
+  <datalist id="ml"><option value="claude-sonnet-4-5"><option value="claude-sonnet-4"><option value="claude-opus-4"><option value="claude-3-5-haiku-latest"></datalist>
+  <small>این صفحه از سرویس شخص ثالث Puter استفاده می‌کند، نه سرور مستقیم Anthropic. پیام‌ها از Puter عبور می‌کنند و شرایط رایگان بودن و نام مدل‌ها را Puter تعیین می‌کند و ممکن است تغییر کند.</small>
+</div>
+<div id="log"><div class="empty" id="empty">برای شروع در «تنظیمات» وارد Puter شوید و پیام بنویسید.</div></div>
+<form id="f">
+  <textarea id="t" rows="1" dir="auto" placeholder="پیام..."></textarea>
+  <button id="send" type="submit">ارسال</button>
+</form>
+<script src="https://js.puter.com/v2/"></script>
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var log=$('log'),t=$('t'),send=$('send'),model=$('model'),cfg=$('cfg');
+  var history=[],busy=false;
+  function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function save(k,v){try{localStorage.setItem(k,v)}catch(e){}}
+  model.value=load('pm')||model.value;
+  model.onchange=function(){save('pm',model.value.trim())};
+  $('login').onclick=function(){
+    if(!window.puter){add('err','Puter بارگذاری نشد. اینترنت را بررسی کنید.');return}
+    puter.auth.signIn().then(function(){add('bot','ورود انجام شد.');cfg.className=''}).catch(function(e){add('err','ورود ناموفق بود (پاپ‌آپ باید مجاز باشد).')});
+  };
+  $('gear').onclick=function(){cfg.className=cfg.className?'':'open'};
+  $('clear').onclick=function(){history=[];log.innerHTML='<div class="empty">گفتگوی جدید شروع شد.</div>'};
+  t.oninput=function(){t.style.height='auto';t.style.height=Math.min(t.scrollHeight,140)+'px'};
+
+  function add(cls,text){
+    var e=$('empty');if(e&&e.parentNode)e.parentNode.removeChild(e);
+    var d=document.createElement('div');
+    d.className='msg '+cls;d.setAttribute('dir','auto');d.textContent=text;
+    log.appendChild(d);log.scrollTop=log.scrollHeight;return d;
+  }
+
+  function textOf(r){
+    if(typeof r==='string')return r;
+    var c=r&&r.message&&r.message.content;
+    if(typeof c==='string')return c;
+    if(c&&c.length){var o='';for(var i=0;i<c.length;i++){o+=(c[i].text||'')}return o}
+    return String(r);
+  }
+  $('f').onsubmit=function(ev){
+    ev.preventDefault();
+    var text=t.value.trim();
+    if(!text||busy)return;
+    if(!window.puter){add('err','Puter بارگذاری نشد. اینترنت را بررسی کنید.');return}
+    busy=true;send.disabled=true;
+    add('me',text);t.value='';t.style.height='auto';
+    history.push({role:'user',content:text});
+    var wait=add('bot','...');
+    puter.ai.chat(history,{model:model.value.trim()}).then(function(r){
+      var out=textOf(r);
+      wait.textContent=out;
+      history.push({role:'assistant',content:out});
+    }).catch(function(e){
+      history.pop();
+      wait.className='msg err';
+      var m=(e&&(e.message||(e.error&&e.error.message)))||JSON.stringify(e);
+      wait.textContent='ارسال نشد: '+m;
+    }).then(function(){busy=false;send.disabled=false;log.scrollTop=log.scrollHeight});
+  };
+})();
+</script>
+</body>
+</html>
